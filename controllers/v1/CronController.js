@@ -1,6 +1,32 @@
 var { AppController } = require('./AppController');
 var moment = require('moment');
 var cmd = require('node-cmd');
+var ActivityModel = require("../../models/Activity");
+var WalletModel = require("../../models/WalletModel");
+var CoinModel = require("../../models/CoinModel");
+var path = require('path');
+var _cliProgress = require('cli-progress');
+
+var AWS = require('aws-sdk');
+var s3 = new AWS.S3();
+AWS
+    .config
+    .loadFromPath('config/aws_config.json');
+var s3 = new AWS.S3({
+    signatureVersion: 'v4'
+});
+var s3bucket = new AWS.S3({
+    params: {
+        Bucket: 'rds-backup-faldax'
+    }
+});
+var fs = require('fs');
+
+var logger = require("./logger");
+
+var Promise = require('bluebird');
+
+const getAsync = Promise.promisify(cmd.get, { multiArgs: true, context: cmd });
 
 const RippleAPI = require('ripple-lib').RippleAPI;
 
@@ -13,22 +39,45 @@ api.connect().then(() => {
     return api.getServerInfo().then(result => {
         console.log(JSON.stringify(result, null, 2));
     })
+}).then(() => {
+    api.connection.on('transaction', ev => {
+        console.log(JSON.stringify(ev, null, 2))
+    });
+    api.connection.request({
+        command: 'subscribe',
+        accounts: ['rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P']
+    });
 }).catch(console.error);
+var counter = 0;
 class InfluxController extends AppController {
 
     constructor() {
         super();
     }
-
-    async executeRippleTransaction() {
+    async getnewaddress(req,res){
+        var coin_id = await CoinModel
+                    .query()
+                    .first()
+                    .where({'coin_code':'txrp','is_active': 'true'});
+        var ressult = await WalletModel
+                    .query()
+                    .first()
+                    .select('receive_address')
+                    .where({'coin_id': coin_id.id})
+                    .orderBy('id','desc');
+        var id = ressult.receive_address.split('=')[1];
+        console.log(id);
+        res.status(200).json({'message':'Your new Ripple Accout is created','account': (process.env.ACCOUNT_ADDRESS+"?dt="+(++id))})
+    }
+    async executeRippleTransaction(req,res) {
         try {
-            console.log("working");
-            const sender = "rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P"
+            let req_body = req.body;
             const preparedTx = await api.prepareTransaction({
                 "TransactionType": "Payment",
-                "Account": sender,
-                "Amount": api.xrpToDrops("22"), // Same as "Amount": "22000000"
-                "Destination": "rUCzEr6jrEyMpjhs4wSdQdz4g8Y382NxfM"
+                "Account": process.env.ACCOUNT_ADDRESS,
+                "Amount": api.xrpToDrops(req_body.amount),
+                "Destination": req_body.to_address,
+                "DestinationTag": req_body.destination_tag
             }, {
                 // Expire this transaction if it doesn't execute within ~5 minutes:
                 "maxLedgerVersionOffset": 75
@@ -36,51 +85,38 @@ class InfluxController extends AppController {
             console.log("txJSON", preparedTx.txJSON);
             const maxLedgerVersion = preparedTx.instructions.maxLedgerVersion;
             console.log(maxLedgerVersion);
-            const response = api.sign(preparedTx.txJSON, "snv45qU2tht2kY5cgVyVptnxjVi4V")
-            const txID = response.id
-            console.log("Identifying hash:", txID)
-            const txBlob = response.signedTransaction
-            console.log("Signed blob:", txBlob)
+            const response = api.sign(preparedTx.txJSON, process.env.SECRET_KEY);
+            const txID = response.id;
+            console.log("Identifying hash:", txID);
+            const txBlob = response.signedTransaction;
+            console.log("Signed blob:", txBlob);
 
-            const earliestLedgerVersion = await module.exports.doSubmit(txBlob)
-            console.log("earliestLedgerVersion", earliestLedgerVersion)
+            const status = await module.exports.doSubmit(txBlob);
+            //console.log("Status", status);
+            if(status.resultCode === 'tesSUCCESS'){
+                res.status(200).json({'status': 1,'message' : 'Transaction is submited on chain.'});
+            }else{
+                res.status(400).json({'status': 0,'message' : status});
+            }
+        } catch (error) {
+            console.log(error);
+        }
+    }
 
-            api.on('ledger', async ledger => {
-                console.log("Ledger version", ledger.ledgerVersion, "was validated.")
-                if (ledger.ledgerVersion > maxLedgerVersion) {
-                    console.log("If the transaction hasn't succeeded by now, it's expired");
-                    try {
-                        var tx = await api.getTransaction(txID, { minLedgerVersion: earliestLedgerVersion })
-                        console.log("Transaction result:", tx.outcome.result)
-                        console.log("Balance changes:", JSON.stringify(tx.outcome.balanceChanges))
-                    } catch (error) {
-                        console.log("Couldn't get transaction outcome:", error)
-                    }
-                }
+    async getBalance(req,res) {
+        try {
+            var address = req.body.address;
+            api.getAccountInfo(address).then(info => {
+                console.log(info);
+              res.status(200).json({'balance' : info});
             });
         } catch (error) {
             console.log(error);
         }
     }
 
-    // async doPrepare() {
-    //   const sender = "rPT1Sjq2YGrBMTttX4GZHjKu9dyfzbpAYe"
-    //   const preparedTx = await api.prepareTransaction({
-    //     "TransactionType": "Payment",
-    //     "Account": sender,
-    //     "Amount": api.xrpToDrops("22"), // Same as "Amount": "22000000"
-    //     "Destination": "rUCzEr6jrEyMpjhs4wSdQdz4g8Y382NxfM"
-    //   }, {
-    //     // Expire this transaction if it doesn't execute within ~5 minutes:
-    //     "maxLedgerVersionOffset": 75
-    //   })
-    //   const maxLedgerVersion = preparedTx.instructions.maxLedgerVersion;
-    //   console.log("Prepared transaction instructions:", preparedTx.txJSON);
-    //   console.log("Transaction cost:", preparedTx.instructions.fee, "XRP");
-    //   console.log("Transaction expires after ledger:", maxLedgerVersion);
-    //   console.log("preparedTx" ,preparedTx.txJSON);
-    //   return preparedTx.txJSON;
-    // }
+    async getsub(req,res){
+    }
 
     async doSubmit(txBlob) {
         console.log("txBlob inside function", txBlob)
@@ -97,7 +133,41 @@ class InfluxController extends AppController {
         // Return the earliest ledger index this transaction could appear in
         // as a result of this submission, which is the first one after the
         // validated ledger at time of submission.
-        return latestLedgerVersion + 1
+        return result;
+    }
+
+    async fromexecuteRippleTransaction(req,res) {
+        try {
+            let req_body = req.body;
+            const preparedTx = await api.prepareTransaction({
+                "TransactionType": "Payment",
+                "Account": req_body.from_address,
+                "Amount": api.xrpToDrops(req_body.amount),
+                "Destination": req_body.to_address,
+                "DestinationTag": req_body.destination_tag
+            }, {
+                // Expire this transaction if it doesn't execute within ~5 minutes:
+                "maxLedgerVersionOffset": 75
+            })
+            console.log("txJSON", preparedTx.txJSON);
+            const maxLedgerVersion = preparedTx.instructions.maxLedgerVersion;
+            console.log(maxLedgerVersion);
+            const response = api.sign(preparedTx.txJSON, req_body.secret);
+            const txID = response.id;
+            console.log("Identifying hash:", txID);
+            const txBlob = response.signedTransaction;
+            console.log("Signed blob:", txBlob);
+
+            const status = await module.exports.doSubmit(txBlob);
+            //console.log("Status", status);
+            if(status.resultCode === 'tesSUCCESS'){
+                res.status(200).json({'status': 1,'message' : 'Transaction is submited on chain.'});
+            }else{
+                res.status(400).json({'status': 0,'message' : status});
+            }
+        } catch (error) {
+            console.log(error);
+        }
     }
 }
 module.exports = new InfluxController();
