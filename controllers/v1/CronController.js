@@ -4,29 +4,9 @@ var cmd = require('node-cmd');
 var ActivityModel = require("../../models/Activity");
 var WalletModel = require("../../models/WalletModel");
 var CoinModel = require("../../models/CoinModel");
-var path = require('path');
-var _cliProgress = require('cli-progress');
-
-var AWS = require('aws-sdk');
-var s3 = new AWS.S3();
-AWS
-    .config
-    .loadFromPath('config/aws_config.json');
-var s3 = new AWS.S3({
-    signatureVersion: 'v4'
-});
-var s3bucket = new AWS.S3({
-    params: {
-        Bucket: 'rds-backup-faldax'
-    }
-});
 var fs = require('fs');
 
-var logger = require("./logger");
-
 var Promise = require('bluebird');
-
-const getAsync = Promise.promisify(cmd.get, { multiArgs: true, context: cmd });
 
 const RippleAPI = require('ripple-lib').RippleAPI;
 
@@ -54,22 +34,24 @@ class InfluxController extends AppController {
     constructor() {
         super();
     }
-    async getnewaddress(req,res){
+
+    async getnewaddress(req, res) {
         var coin_id = await CoinModel
-                    .query()
-                    .first()
-                    .where({'coin_code':'txrp','is_active': 'true'});
+            .query()
+            .first()
+            .where({ 'coin_code': 'txrp', 'is_active': 'true' });
         var ressult = await WalletModel
-                    .query()
-                    .first()
-                    .select('receive_address')
-                    .where({'coin_id': coin_id.id})
-                    .orderBy('id','desc');
+            .query()
+            .first()
+            .select('receive_address')
+            .where({ 'coin_id': coin_id.id })
+            .orderBy('id', 'desc');
         var id = ressult.receive_address.split('=')[1];
         console.log(id);
-        res.status(200).json({'message':'Your new Ripple Accout is created','account': (process.env.ACCOUNT_ADDRESS+"?dt="+(++id))})
+        res.status(200).json({ 'message': 'Your new Ripple Accout is created', 'account': (process.env.ACCOUNT_ADDRESS + "?dt=" + (++id)) })
     }
-    async executeRippleTransaction(req,res) {
+
+    async executeRippleTransaction(req, res) {
         try {
             let req_body = req.body;
             const preparedTx = await api.prepareTransaction({
@@ -93,29 +75,35 @@ class InfluxController extends AppController {
 
             const status = await module.exports.doSubmit(txBlob);
             //console.log("Status", status);
-            if(status.resultCode === 'tesSUCCESS'){
-                res.status(200).json({'status': 1,'message' : 'Transaction is submited on chain.'});
-            }else{
-                res.status(400).json({'status': 0,'message' : status});
+            if (status.resultCode === 'tesSUCCESS') {
+                console.log("preparedTx", preparedTx)
+                console.log("preparedTx.txJSON", preparedTx.txJSON)
+                let data = {
+                    'fees': preparedTx.instructions.fee,
+                    'txID': txID
+                }
+                res.status(200).json({ 'status': 1, 'message': 'Transaction is submited on chain.', data });
+            } else {
+                res.status(400).json({ 'status': 0, 'message': status });
             }
         } catch (error) {
             console.log(error);
         }
     }
 
-    async getBalance(req,res) {
+    async getBalance(req, res) {
         try {
             var address = req.body.address;
             api.getAccountInfo(address).then(info => {
                 console.log(info);
-              res.status(200).json({'balance' : info});
+                res.status(200).json({ 'balance': info });
             });
         } catch (error) {
             console.log(error);
         }
     }
 
-    async getsub(req,res){
+    async getsub(req, res) {
     }
 
     async doSubmit(txBlob) {
@@ -136,7 +124,7 @@ class InfluxController extends AppController {
         return result;
     }
 
-    async fromexecuteRippleTransaction(req,res) {
+    async fromexecuteRippleTransaction(req, res) {
         try {
             let req_body = req.body;
             const preparedTx = await api.prepareTransaction({
@@ -160,10 +148,10 @@ class InfluxController extends AppController {
 
             const status = await module.exports.doSubmit(txBlob);
             //console.log("Status", status);
-            if(status.resultCode === 'tesSUCCESS'){
-                res.status(200).json({'status': 1,'message' : 'Transaction is submited on chain.'});
-            }else{
-                res.status(400).json({'status': 0,'message' : status});
+            if (status.resultCode === 'tesSUCCESS') {
+                res.status(200).json({ 'status': 1, 'message': 'Transaction is submited on chain.' });
+            } else {
+                res.status(400).json({ 'status': 0, 'message': status });
             }
         } catch (error) {
             console.log(error);

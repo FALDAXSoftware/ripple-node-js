@@ -18,12 +18,6 @@ app.use(bodyParser.json({
   extended: false
 }));
 
-
-app.post('/api/v1/ripple-transaction', cronController.executeRippleTransaction);
-app.post('/api/v1/ripple-transaction-from', cronController.fromexecuteRippleTransaction);
-app.get('/api/v1/ripple-balance', cronController.getBalance);
-app.get('/api/v1/ripple-get-new-address', cronController.getnewaddress);
-app.get('/api/v1/ripple', cronController.getsub);
 app.all('/*', function (req, res, next) {
   // CORS headers
   res.header("Access-Control-Allow-Origin", "*"); // restrict it to the required domain
@@ -47,6 +41,12 @@ app.all('/*', function (req, res, next) {
     next();
   }
 });
+
+app.post('/api/v1/ripple-transaction', cronController.executeRippleTransaction);
+app.post('/api/v1/ripple-transaction-from', cronController.fromexecuteRippleTransaction);
+app.get('/api/v1/ripple-balance', cronController.getBalance);
+app.get('/api/v1/ripple-get-new-address', cronController.getnewaddress);
+app.get('/api/v1/ripple', cronController.getsub);
 
 // Start the server
 app.set('port', 3012);
