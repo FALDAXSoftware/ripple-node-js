@@ -1,6 +1,6 @@
 var { AppController } = require('./AppController');
-var moment = require('moment');
-var cmd = require('node-cmd');
+
+var request = require('request');
 var ActivityModel = require("../../models/Activity");
 var WalletModel = require("../../models/WalletModel");
 var CoinModel = require("../../models/CoinModel");
@@ -14,7 +14,7 @@ const RippleAPI = require('ripple-lib').RippleAPI;
 const api = new RippleAPI({
     server: 'wss://s.altnet.rippletest.net:51233' // Public rippled server
 });
-
+api.connection._config.connectionTimeout = 3e4;
 api.connect().then(() => {
     console.log('connected');
     return api.getServerInfo().then(result => {
@@ -284,8 +284,14 @@ class InfluxController extends AppController {
             console.log(error);
         }
     }
-
-    async getsub(req, res) {
+    async getFees(req, res) {
+        var fees = await api.getFee(); 
+        return res
+        .status(200)
+        .json({
+            "status": 200,
+            "fees": api.xrpToDrops(fees)
+        })
     }
 
     async doSubmit(txBlob) {

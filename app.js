@@ -46,12 +46,12 @@ app.post('/api/v1/ripple-transaction', cronController.executeRippleTransaction);
 app.post('/api/v1/ripple-transaction-from', cronController.fromexecuteRippleTransaction);
 app.get('/api/v1/ripple-balance', cronController.getBalance);
 app.get('/api/v1/ripple-get-new-address', cronController.getnewaddress);
-app.get('/api/v1/ripple', cronController.getsub);
+app.get('/api/v1/ripple-fees', cronController.getFees);
 
 // Start the server
-app.set('port', 3012);
+app.set('port', 3013);
 server.listen(app.get('port'), function () {
-  console.log(process.env.PROJECT_NAME + " Application is running on " + 3012 + " port....");
+  console.log(process.env.PROJECT_NAME + " Application is running on " + 3013 + " port....");
 });
 
 // app.get('/api/v1/call-cron-route', cronController.executeDataBackup);
