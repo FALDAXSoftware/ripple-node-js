@@ -37,19 +37,67 @@ class InfluxController extends AppController {
     }
 
     async getnewaddress(req, res) {
-        var coin_id = await CoinModel
-            .query()
-            .first()
-            .where({ 'coin_code': 'txrp', 'is_active': 'true' });
-        var ressult = await WalletModel
-            .query()
-            .first()
-            .select('receive_address')
-            .where({ 'coin_id': coin_id.id })
-            .orderBy('id', 'desc');
-        var id = ressult.receive_address.split('=')[1];
-        console.log(id);
-        res.status(200).json({ 'message': 'Your new Ripple Accout is created', 'account': (process.env.ACCOUNT_ADDRESS + "?dt=" + (++id)) })
+        try{
+            console.log(req.body);
+            var req_body = req.body;
+            var coin_id = await CoinModel
+                .query()
+                .first()
+                .where({ 'coin_code': 'txrp', 'is_active': 'true' });
+            if(coin_id != undefined){
+                var userwallet = await WalletModel
+                    .query()
+                    .first()
+                    .select('receive_address')
+                    .where({user_id: req_body.user_id, coin_id: coin_id.id,deleted_at: null})
+                //Check wehther the accout is already generated or not
+                if(userwallet != undefined){
+                    res.status(500).json({status:500, 'message': 'Address has already been created.', 'data': userwallet.receive_address})
+                }else{
+                    //get the last dt to generate new one
+                    var ressult = await WalletModel
+                        .query()
+                        .first()
+                        .select('receive_address')
+                        .where({ 'coin_id': coin_id.id })
+                        .orderBy('id', 'desc');
+                    var id = ressult.receive_address.split('=')[1];
+                    var newaddress = (process.env.ACCOUNT_ADDRESS + "?dt=" + (++id));
+
+                    var tx = await WalletModel
+                        .query()
+                        .insert({
+                            wallet_id: 'wallet',
+                            coin_id: coin_id.id,
+                            receive_address: newaddress,
+                            is_active: true,
+                            user_id: req_body.user_id,
+                            balance: 0,
+                            placed_balance:0,
+                            address_label: req_body.label,
+                            is_admin: false
+                        });
+                    
+                    res.status(200).json({status:200, 'message': 'Address has been created successfully.', 'data': newaddress})
+                }
+            }else{
+                res.status(400).json({status:400, 'message': 'Coin is in-active'})
+            }
+        }catch(err){
+            console.log(err);
+            return res
+                .status(500)
+                .json({
+                    "status": 500,
+                    "message": "Server Error"
+                })
+        }
+        /*
+            req:
+                Userid
+                label
+
+        */
     }
 
     async executeRippleTransaction(req, res) {
@@ -92,13 +140,13 @@ class InfluxController extends AppController {
 
                     var balanceChecking = parseFloat(amount) + parseFloat(faldax_fee) + parseFloat(network_fee);
                     var data = {};
-                    if (req.body.DestinationTag) {
+                    if (req.body.destinationTag) {
                         data = {
                             "TransactionType": "Payment",
                             "Account": process.env.ACCOUNT_ADDRESS,
                             "Amount": api.xrpToDrops(amount),
                             "Destination": destination_address,
-                            "DestinationTag": req.body.DestinationTag
+                            "DestinationTag": parseInt(req.body.destinationTag)
                         }
                     } else {
                         data = {

@@ -45,7 +45,7 @@ app.all('/*', function (req, res, next) {
 app.post('/api/v1/ripple-transaction', cronController.executeRippleTransaction);
 app.post('/api/v1/ripple-transaction-from', cronController.fromexecuteRippleTransaction);
 app.get('/api/v1/ripple-balance', cronController.getBalance);
-app.get('/api/v1/ripple-get-new-address', cronController.getnewaddress);
+app.post('/api/v1/ripple-get-new-address', cronController.getnewaddress);
 app.get('/api/v1/ripple-fees', cronController.getFees);
 
 // Start the server
