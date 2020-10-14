@@ -4,6 +4,8 @@ var cmd = require('node-cmd');
 var ActivityModel = require("../../models/Activity");
 var WalletModel = require("../../models/WalletModel");
 var CoinModel = require("../../models/CoinModel");
+var WalletHistoryModel = require("../../models/WalletHistoryModel");
+var TransactionTableModel = require("../../models/TransactionTableModel");
 var fs = require('fs');
 
 var Promise = require('bluebird');
@@ -82,6 +84,9 @@ class InfluxController extends AppController {
                     'fees': preparedTx.instructions.fee,
                     'txID': txID
                 }
+
+                
+
                 res.status(200).json({ 'status': 1, 'message': 'Transaction is submited on chain.', data });
             } else {
                 res.status(400).json({ 'status': 0, 'message': status });
