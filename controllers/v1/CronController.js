@@ -4,6 +4,7 @@ var request = require('request');
 var ActivityModel = require("../../models/Activity");
 var WalletModel = require("../../models/WalletModel");
 var CoinModel = require("../../models/CoinModel");
+var CurrencyConversionModel = require("../../models/CurrencyConversion");
 var WalletHistoryModel = require("../../models/WalletHistoryModel");
 var TransactionTableModel = require("../../models/TransactionTableModel");
 var getFiatValuHelper = require("../../helpers/get-fiat-value")
@@ -12,6 +13,8 @@ var UserNotificationModel = require("../../models/UserNotifcationModel");
 var EmailTemplateModel = require("../../models/EmailTemplateModel");
 var UsersModel = require("../../models/UsersModel");
 var fs = require('fs');
+var appResponse = require("../../app");
+var logger = require("./logger");
 
 const RippleAPI = require('ripple-lib').RippleAPI;
 
@@ -152,7 +155,7 @@ api.connect().then(() => {
                             }
                             if (userNotification.text == true || userNotification.text == "true") {
                                 if (userData.phone_number != undefined && userData.phone_number != null && userData.phone_number != '') {
-                                    await sails.helpers.notification.send.text("receive", userData)
+                                    await emailSendHelper.sendSMS("receive", userData)
                                 }
                             }
                         }
@@ -167,7 +170,7 @@ api.connect().then(() => {
         accounts: ['rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P']
     });
 }).catch(console.error);
-var counter = 0;
+
 class InfluxController extends AppController {
 
     constructor() {
@@ -176,6 +179,12 @@ class InfluxController extends AppController {
 
     async getnewaddress(req, res) {
         try {
+            await logger.info({
+                "module": "Get New Address Started",
+                "user_id": "user_" + req.body.user_id,
+                "url": "New Address Function",
+                "type": "Success"
+            })
             console.log(req.body);
             var req_body = req.body;
             var coin_id = await CoinModel
@@ -215,7 +224,12 @@ class InfluxController extends AppController {
                             address_label: req_body.label,
                             is_admin: false
                         });
-
+                    await logger.info({
+                        "module": "Get New Address Ended",
+                        "user_id": "user_" + req.body.user_id,
+                        "url": "New Address Function",
+                        "type": "Success"
+                    }, newaddress)
                     res.status(200).json({ status: 200, 'message': 'Address has been created successfully.', 'data': newaddress })
                 }
             } else {
@@ -223,6 +237,12 @@ class InfluxController extends AppController {
             }
         } catch (err) {
             console.log(err);
+            await logger.info({
+                "module": "Get New Address Error",
+                "user_id": "user_" + req.body.user_id,
+                "url": "New Address Function",
+                "type": "Error"
+            }, err)
             return res
                 .status(500)
                 .json({
@@ -240,6 +260,12 @@ class InfluxController extends AppController {
 
     async executeRippleTransaction(req, res) {
         try {
+            await logger.info({
+                "module": "Execute Transaction Started",
+                "user_id": "user_" + req.body.user_id,
+                "url": "Send Function",
+                "type": "Success"
+            })
             // let req_body = req.body;
             var user_id = req.body.user_id;
             var amount = req.body.amount;
@@ -258,11 +284,6 @@ class InfluxController extends AppController {
                 .orderBy("id", "DESC");
 
             if (getCoinData != undefined) {
-
-                console.log("getCoinData.id", getCoinData.id);
-                console.log("user_id", user_id);
-                console.log("is_admin", is_admin)
-
                 var getUserWalletData = await WalletModel
                     .query()
                     .first()
@@ -272,9 +293,10 @@ class InfluxController extends AppController {
                     .andWhere("is_admin", is_admin)
                     .andWhere("deleted_at", null);
 
-                console.log("getUserWalletData", getUserWalletData)
-
                 if (getUserWalletData != undefined) {
+                    if (is_admin == true) {
+                        faldax_fee = 0.0;
+                    }
 
                     var balanceChecking = parseFloat(amount) + parseFloat(faldax_fee) + parseFloat(network_fee);
                     var data = {};
@@ -301,20 +323,14 @@ class InfluxController extends AppController {
                             // Expire this transaction if it doesn't execute within ~5 minutes:
                             "maxLedgerVersionOffset": 75
                         })
-                        console.log("txJSON", preparedTx.txJSON);
                         const maxLedgerVersion = preparedTx.instructions.maxLedgerVersion;
-                        console.log(maxLedgerVersion);
-                        const response = api.sign(preparedTx.txJSON, process.env.SECRET_KEY);
+                        const response = api.sign(preparedTx.txJSON, process.env.SECRET);
                         const txID = response.id;
-                        console.log("Identifying hash:", txID);
                         const txBlob = response.signedTransaction;
-                        console.log("Signed blob:", txBlob);
 
                         const status = await module.exports.doSubmit(txBlob);
-                        console.log("Status", status);
+
                         if (status.resultCode === 'tesSUCCESS') {
-                            console.log("preparedTx", preparedTx)
-                            console.log("preparedTx.txJSON", preparedTx.txJSON)
                             let data = {
                                 'fees': preparedTx.instructions.fee,
                                 'txID': txID
@@ -340,7 +356,7 @@ class InfluxController extends AppController {
 
                             var transactionData = await WalletHistoryModel
                                 .query()
-                                .insert({
+                                .insertAndFetch({
                                     "source_address": getUserWalletData.receive_address,
                                     "destination_address": destination_address,
                                     "amount": userBalanceUpdateValue,
@@ -352,14 +368,14 @@ class InfluxController extends AppController {
                                     "faldax_fee": faldax_fee,
                                     "actual_network_fees": data.fees,
                                     "estimated_network_fees": network_fee,
-                                    "user_id": getUserWalletData.user_id,
+                                    "user_id": user_id,
                                     "is_admin": is_admin,
                                     "fiat_values": getFiatValues
                                 });
 
                             var transactionValue = await TransactionTableModel
                                 .query()
-                                .insert({
+                                .insertAndFetch({
                                     "source_address": getUserWalletData.receive_address,
                                     "destination_address": destination_address,
                                     "amount": userBalanceUpdateValue,
@@ -372,58 +388,123 @@ class InfluxController extends AppController {
                                     "actual_network_fees": data.fees,
                                     "estimated_network_fees": network_fee,
                                     "transaction_from": "Send to Destination",
-                                    "user_id": getUserWalletData.user_id,
+                                    "user_id": user_id,
                                     "is_admin": is_admin
                                 });
 
-
-                            var adminBalance = await WalletModel
-                                .query()
-                                .first()
-                                .select("balance", "placed_balance", "receive_address", "id")
-                                .where("user_id", process.env.ADMIN_ID)
-                                .andWhere("coin_id", getCoinData.id)
-                                .andWhere("is_admin", is_admin)
-                                .andWhere("deleted_at", null)
-                                .orderBy("id", "DESC");
-
-                            if (adminBalance != undefined) {
-                                var amountToBeAdded = 0.0
-                                amountToBeAdded = parseFloat(faldax_fee)
-                                console.log("amountToBeAdded", amountToBeAdded)
-                                console.log("walletBalance.balance", walletBalance.balance)
-                                var updateWalletBalance = await WalletModel
+                            if (is_admin == false) {
+                                var adminBalance = await WalletModel
                                     .query()
-                                    .where("deleted_at", null)
+                                    .first()
+                                    .select("balance", "placed_balance", "receive_address", "id")
+                                    .where("user_id", process.env.ADMIN_ID)
                                     .andWhere("coin_id", getCoinData.id)
                                     .andWhere("is_admin", true)
-                                    .andWhere("user_id", process.env.ADMIN_ID)
-                                    .patch({
-                                        "balance": parseFloat(adminBalance.balance) + parseFloat(amountToBeAdded),
-                                        "placed_balance": parseFloat(adminBalance.placed_balance) + parseFloat(amountToBeAdded)
-                                    });
+                                    .andWhere("deleted_at", null)
+                                    .orderBy("id", "DESC");
 
-                                var walletHistoryValue = await WalletHistoryModel
-                                    .query()
-                                    .insert({
-                                        "source_address": getUserWalletData.receive_address,
-                                        "destination_address": adminBalance.receive_address,
-                                        "amount": parseFloat(amountToBeAdded).toFixed(8),
-                                        "actual_amount": amount,
-                                        "transaction_type": "send",
-                                        "created_at": new Date(),
-                                        "coin_id": getCoinData.id,
-                                        "transaction_id": data.txID,
-                                        "faldax_fee": faldax_fee,
-                                        "actual_network_fees": 0.0,
-                                        "estimated_network_fees": 0.0,
-                                        "user_id": process.env.ADMIN_ID,
-                                        "is_admin": is_admin,
-                                        "fiat_values": getFiatValues
-                                    })
+                                if (adminBalance != undefined) {
+                                    var amountToBeAdded = 0.0
+                                    amountToBeAdded = parseFloat(faldax_fee)
+                                    var updateWalletBalance = await WalletModel
+                                        .query()
+                                        .where("deleted_at", null)
+                                        .andWhere("coin_id", getCoinData.id)
+                                        .andWhere("is_admin", true)
+                                        .andWhere("user_id", process.env.ADMIN_ID)
+                                        .patch({
+                                            "balance": parseFloat(adminBalance.balance) + parseFloat(amountToBeAdded),
+                                            "placed_balance": parseFloat(adminBalance.placed_balance) + parseFloat(amountToBeAdded)
+                                        });
+
+                                    var walletHistoryValue = await WalletHistoryModel
+                                        .query()
+                                        .insert({
+                                            "source_address": getUserWalletData.receive_address,
+                                            "destination_address": adminBalance.receive_address,
+                                            "amount": parseFloat(amountToBeAdded).toFixed(8),
+                                            "actual_amount": amount,
+                                            "transaction_type": "send",
+                                            "created_at": new Date(),
+                                            "coin_id": getCoinData.id,
+                                            "transaction_id": data.txID,
+                                            "faldax_fee": faldax_fee,
+                                            "actual_network_fees": 0.0,
+                                            "estimated_network_fees": 0.0,
+                                            "user_id": process.env.ADMIN_ID,
+                                            "is_admin": true,
+                                            "fiat_values": getFiatValues
+                                        })
+
+                                    console.log("walletHistoryValue", walletHistoryValue)
+
+                                    var userData = await UsersModel
+                                        .query()
+                                        .first()
+                                        .select()
+                                        .where("deleted_at", null)
+                                        .andWhere("is_active", true)
+                                        .andWhere("id", user_id);
+
+                                    var userNotification = await UserNotificationModel
+                                        .query()
+                                        .first()
+                                        .select()
+                                        .where("deleted_at", null)
+                                        .andWhere("user_id", user_id)
+                                        .andWhere("slug", "withdraw");
+
+                                    var coin_data = await CoinModel
+                                        .query()
+                                        .first()
+                                        .select()
+                                        .where("id", getCoinData.id);
+
+                                    if (coin_data != undefined) {
+                                        userData.coinName = coin_data.coin;
+                                    } else {
+                                        userData.coinName = "-";
+                                    }
+
+                                    // userData.coinName = coin.coin_code;
+                                    userData.amountReceived = parseFloat(userBalanceUpdateValue).toFixed(8);
+
+                                    console.log("userData", userData)
+
+                                    if (userNotification != undefined) {
+                                        if (userNotification.email == true || userNotification.email == "true") {
+                                            if (userData.email != undefined) {
+                                                console.log(userData);
+                                                await emailSendHelper.SendEmail("withdraw", userData)
+                                            }
+                                        }
+                                        if (userNotification.text == true || userNotification.text == "true") {
+                                            if (userData.phone_number != undefined && userData.phone_number != null && userData.phone_number != '') {
+                                                await emailSendHelper.sendSMS("receive", userData)
+                                            }
+                                        }
+                                    }
+
+                                    await logger.info({
+                                        "module": "Execute Transcation Ended",
+                                        "user_id": "user_" + user_id,
+                                        "url": "Send Function",
+                                        "type": "Success"
+                                    }, data);
+
+                                    res.status(200).json({ 'status': 1, 'message': 'Transaction is submited on chain.', userBalanceUpdateValue });
+                                }
+                            } else if (is_admin == true) {
+                                await logger.info({
+                                    "module": "Execute Transcation Ended",
+                                    "user_id": "user_" + req.body.user_id,
+                                    "url": "Send Function",
+                                    "type": "Success"
+                                }, data)
+                                res.status(200).json({ 'status': 1, 'message': 'Transaction is submited on chain.', userBalanceUpdateValue });
                             }
 
-                            res.status(200).json({ 'status': 1, 'message': 'Transaction is submited on chain.', userBalanceUpdateValue });
+
                         } else {
                             res.status(400).json({ 'status': 0, 'message': status });
                         }
@@ -456,29 +537,97 @@ class InfluxController extends AppController {
 
         } catch (error) {
             console.log(error);
+            await logger.info({
+                "module": "Execute Transcation Error",
+                "user_id": "user_" + req.body.user_id,
+                "url": "Send Function",
+                "type": "Error"
+            }, error)
+            return res
+                .status(500)
+                .json({
+                    "status": 500,
+                    "message": "Server Error"
+                })
         }
     }
 
     async getBalance(req, res) {
         try {
+            await logger.info({
+                "module": "Get Balance Started",
+                "user_id": "user_" + req.body.address,
+                "url": "Get Balance Function",
+                "type": "Success"
+            })
             var address = req.body.address;
-            api.getAccountInfo(address).then(info => {
+            console.log("address", address)
+            if (address == "") {
+                address = "rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P";
+            }
+            api.getAccountInfo(address).then(async info => {
                 console.log(info);
+                await logger.info({
+                    "module": "Get Balance Ended",
+                    "user_id": "user_" + req.body.address,
+                    "url": "Get Balance Function",
+                    "type": "Success"
+                }, info)
                 res.status(200).json({ 'balance': info });
             });
         } catch (error) {
             console.log(error);
+            await logger.info({
+                "module": "Get Balance Error",
+                "user_id": "user_" + req.body.address,
+                "url": "Get Balance Function",
+                "type": "Error"
+            }, error)
+            return res
+                .status(500)
+                .json({
+                    "status": 500,
+                    "message": "Server Error"
+                })
         }
     }
 
     async getFees(req, res) {
-        var fees = await api.getFee();
-        return res
-            .status(200)
-            .json({
-                "status": 200,
-                "fees": api.xrpToDrops(fees)
+        try {
+            await logger.info({
+                "module": "Fees Started",
+                "user_id": "user",
+                "url": "Get Fee Function",
+                "type": "Success"
             })
+            var fees = await api.getFee();
+            await logger.info({
+                "module": "Fees Started",
+                "user_id": "user",
+                "url": "Get Fee Function",
+                "type": "Success"
+            }, fees)
+            return res
+                .status(200)
+                .json({
+                    "status": 200,
+                    "fees": api.xrpToDrops(fees)
+                })
+        } catch (err) {
+            console.log("err", err);
+            await logger.info({
+                "module": "Fees Error",
+                "user_id": "user",
+                "url": "Get Fee Function",
+                "type": "Error"
+            }, err)
+            return res
+                .status(500)
+                .json({
+                    "status": 500,
+                    "message": "Server Error"
+                })
+        }
     }
 
     async doSubmit(txBlob) {
@@ -530,6 +679,72 @@ class InfluxController extends AppController {
             }
         } catch (error) {
             console.log(error);
+        }
+    }
+
+    async getAllTransactionList(req, res) {
+        try {
+            var coinData = await CoinModel
+                .query()
+                .first()
+                .select()
+                .where("deleted_at", null)
+                .andWhere("coin", process.env.COIN);
+
+            var coinFiatValue = await CurrencyConversionModel
+                .query()
+                .first()
+                .select()
+                .where("deleted_at", null)
+                .andWhere("coin_id", coinData.id);
+            var data = await api.getTransactions("rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P", {
+                limit: 50
+            });
+
+            var responseObject = {}
+
+            var transfers = [];
+            for (var i = 0; i < data.length; i++) {
+                var pushObject = {};
+                var value = data[i].specification;
+                var valueData = data[i].outcome.balanceChanges;
+                var valueOfData = data[i].outcome.deliveredAmount;
+                var transaction_type;
+                if (value.source.address == "rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P") {
+                    transaction_type = 'send';
+                } else if (value.destination.address == "rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P") {
+                    transaction_type = "receive"
+                }
+
+                pushObject = {
+                    type: transaction_type,
+                    baseValue: (valueOfData != undefined) ? Number(parseFloat(valueOfData.value * coinData.coin_precision).toFixed(8)) : (0.0),
+                    baseValueString: (valueOfData != undefined) ? (valueOfData.value * coinData.coin_precision).toString() : (0.0),
+                    coin: coinData.coin_code,
+                    createdTime: data[i].outcome.timestamp,
+                    date: data[i].outcome.timestamp,
+                    entries: value,
+                    feeString: (data[i].outcome.fee * coinData.coin_precision),
+                    normalizedTxHash: (data[i].id),
+                    txid: (data[i].id),
+                    usdRate: (coinFiatValue != undefined && coinFiatValue.quote != undefined) ? (coinFiatValue.quote["USD"].price) : (0.0),
+                    usd: (valueOfData != undefined) ? (coinFiatValue != undefined && coinFiatValue.quote != undefined) ? ((valueOfData.value) * coinFiatValue.quote["USD"].price) : (0.0) : (0.0),
+                    value: (valueOfData != undefined) ? Number(parseFloat(valueOfData.value * coinData.coin_precision).toFixed(8)) : (0.0),
+                    valueString: (valueOfData != undefined) ? (valueOfData.value * coinData.coin_precision).toString() : ('0.0'),
+                    wallet: "rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P"
+                }
+                transfers.push(pushObject)
+            }
+            responseObject.coin = coinData.coin_code;
+            responseObject.transfers = transfers;
+            return res
+                .status(200)
+                .json({
+                    "status": 200,
+                    "data": responseObject
+                })
+        } catch (error) {
+            console.log("error", error);
         }
     }
 }

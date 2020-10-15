@@ -63,9 +63,10 @@ app.all('/*', function (req, res, next) {
 
 app.post('/api/v1/ripple-transaction', cronController.executeRippleTransaction);
 app.post('/api/v1/ripple-transaction-from', cronController.fromexecuteRippleTransaction);
-app.get('/api/v1/ripple-balance', cronController.getBalance);
+app.post('/api/v1/ripple-balance', cronController.getBalance);
 app.post('/api/v1/ripple-get-new-address', cronController.getnewaddress);
 app.get('/api/v1/ripple-fees', cronController.getFees);
+app.get('/api/v1/get-transaction-list', cronController.getAllTransactionList);
 
 // Start the server
 app.set('port', 3013);
@@ -150,7 +151,7 @@ sendEmail = async (slug, user) => {
 }
 
 module.exports = {
-  sendEmal: sendEmail
+  sendEmail: sendEmail
 }
 // app.get('/api/v1/call-cron-route', cronController.executeDataBackup);
 
