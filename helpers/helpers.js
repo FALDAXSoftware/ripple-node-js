@@ -1,5 +1,3 @@
-var express = require('express');
-var app = express();
 
 var SendEmail = async (slug, user) => {
     // console.log(requestedData)
