@@ -12,7 +12,7 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 
-nodeport: 8000
+nodeport: 3013
 
 configuration:
   pod_directory: /usr/share/nginx/html/conf
