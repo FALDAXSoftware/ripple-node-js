@@ -1,0 +1,70 @@
+apiVersion: apps/v1beta2
+kind: Deployment
+metadata:
+  name: {{ include "currency.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "currency.name" . }}
+    helm.sh/chart: {{ include "currency.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "currency.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "currency.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      volumes:
+      - name: config-value
+        configMap:
+          name: {{ .Release.Name }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          volumeMounts:
+          - name: config-value
+            mountPath: {{ .Values.configuration.pod_directory }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.nodeport }}
+              protocol: TCP
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+{{- if .Values.health.enable }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.health.livenessProbe.path }}
+              port: {{ default 80 .Values.health.livenessProbe.port }}
+            initialDelaySeconds: {{ default 120 .Values.health.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ default 30 .Values.health.livenessProbe.periodSeconds }}
+            failureThreshold: {{ default 5 .Values.health.livenessProbe.failureThreshold }}
+            successThreshold: {{ default 1 .Values.health.livenessProbe.successThreshold }}
+            timeoutSeconds: {{ default 5 .Values.health.livenessProbe.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.health.readinessProbe.path }}
+              port: {{ default 80 .Values.health.readinessProbe.port }}
+            initialDelaySeconds: {{ default 60 .Values.health.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ default 30 .Values.health.readinessProbe.periodSeconds }}
+            failureThreshold: {{ default 5 .Values.health.readinessProbe.failureThreshold }}
+            successThreshold: {{ default 1 .Values.health.readinessProbe.successThreshold }}
+            timeoutSeconds: {{ default 5 .Values.health.readinessProbe.timeoutSeconds }}
+{{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+    {{- end }}
