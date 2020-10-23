@@ -67,6 +67,7 @@ app.post('/api/v1/ripple-balance', cronController.getBalance);
 app.post('/api/v1/ripple-get-new-address', cronController.getnewaddress);
 app.get('/api/v1/ripple-fees', cronController.getFees);
 app.get('/api/v1/get-transaction-list', cronController.getAllTransactionList);
+app.get('/api/v1/health-check', cronController.healthCheck)
 
 // Start the server
 app.set('port', 3013);
