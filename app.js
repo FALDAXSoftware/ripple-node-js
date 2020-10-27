@@ -47,7 +47,7 @@ app.all('/*', function (req, res, next) {
     i18n.setLocale(req.headers.language);
   }
   console.log(req.headers["x-token"]);
-  if (req.headers["x-token"] != "faldax-ripple-node") {
+  if (req.url != "/api/v1/health-check" && req.headers["x-token"] != "faldax-ripple-node") {
     res
       .status(403)
       .json({ status: 403, message: ("Unauthorized access") });
@@ -67,11 +67,12 @@ app.post('/api/v1/ripple-balance', cronController.getBalance);
 app.post('/api/v1/ripple-get-new-address', cronController.getnewaddress);
 app.get('/api/v1/ripple-fees', cronController.getFees);
 app.get('/api/v1/get-transaction-list', cronController.getAllTransactionList);
+app.get('/api/v1/health-check', cronController.healthCheck)
 
 // Start the server
-app.set('port', 3013);
+app.set('port', process.env.PORT);
 server.listen(app.get('port'), function () {
-  console.log(process.env.PROJECT_NAME + " Application is running on " + 3013 + " port....");
+  console.log(process.env.PROJECT_NAME + " Application is running on " + process.env.PORT + " port....");
 });
 
 sendEmail = async (slug, user) => {
