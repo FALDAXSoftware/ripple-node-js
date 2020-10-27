@@ -12,6 +12,7 @@ var emailSendHelper = require("../../helpers/helpers");
 var UserNotificationModel = require("../../models/UserNotifcationModel");
 var EmailTemplateModel = require("../../models/EmailTemplateModel");
 var UsersModel = require("../../models/UsersModel");
+var AdminSettingModel = require("../../models/AdminSettingModel");
 var fs = require('fs');
 var appResponse = require("../../app");
 var logger = require("./logger");
@@ -745,6 +746,39 @@ class InfluxController extends AppController {
                 })
         } catch (error) {
             console.log("error", error);
+        }
+    }
+
+    async healthCheck(req, res) {
+        try {
+
+            var system_health = await AdminSettingModel
+                .query()
+                .first()
+                .select()
+                .where("deleted_at", null)
+                .andWhere("slug", "system_health")
+                .orderBy("id", "DESC");
+
+            if (system_health && system_health.value == "ok_from_db") {
+                return res.status(200).json({
+                    "status": 200,
+                    "message": "System Health is Good.",
+                })
+            } else {
+                return res.status(500).json({
+                    "status": 500,
+                    "message": "System Health is Not Good."
+                })
+            }
+
+        } catch (error) {
+            console.log("error", error);
+            return res.status(500).json({
+                "status": 500,
+                "message": "System Health is Not Good.",
+                error_at: error.stack
+            })
         }
     }
 }
