@@ -13,6 +13,7 @@ var mailer = require('express-mailer');
 var cronController = require("./controllers/v1/CronController")
 var getRippleTransaction = require("./controllers/v1/CronController");
 var bodyParser = require('body-parser');
+var mailer = require('express-mailer');
 
 app.use(bodyParser.json({
   limit: "2.7mb",
