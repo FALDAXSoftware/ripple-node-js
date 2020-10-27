@@ -55,4 +55,20 @@ controller:
     enabled: false
 
 health:
-  enable: false
+  enable: true
+  livenessProbe:
+    path: /api/v1/health-check
+    port: 3013
+    initialDelaySeconds: 120
+    periodSeconds: 30
+    failureThreshold: 5
+    successThreshold: 1
+    timeoutSeconds: 5
+  readinessProbe:
+    path: /api/v1/health-check
+    port: 3013
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    failureThreshold: 5
+    successThreshold: 1
+    timeoutSeconds: 5
