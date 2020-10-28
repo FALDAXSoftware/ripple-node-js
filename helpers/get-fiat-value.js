@@ -11,9 +11,9 @@ var getFiatValue = async (crypto) => {
     fiatData = fiatData.rows;
 
     var fiatObject = {}
-    fiatObject.asset_1_usd = fiatData[0].asset_1_usd;
-    fiatObject.asset_1_eur = fiatData[0].asset_1_eur;
-    fiatObject.asset_1_inr = fiatData[0].asset_1_inr;
+    fiatObject.asset_1_usd = (fiatData.length > 0) ? (fiatData[0].asset_1_usd) : (0.0);
+    fiatObject.asset_1_eur = (fiatData.length > 0) ? (fiatData[0].asset_1_eur) : (0.0);
+    fiatObject.asset_1_inr = (fiatData.length > 0) ? (fiatData[0].asset_1_inr) : (0.0);
 
 
     console.log("fiatObject", (fiatObject))
