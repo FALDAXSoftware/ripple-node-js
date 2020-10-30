@@ -1,7 +1,6 @@
 var { AppController } = require('./AppController');
 
 var request = require('request');
-var ActivityModel = require("../../models/Activity");
 var WalletModel = require("../../models/WalletModel");
 var CoinModel = require("../../models/CoinModel");
 var CurrencyConversionModel = require("../../models/CurrencyConversion");
@@ -10,23 +9,21 @@ var TransactionTableModel = require("../../models/TransactionTableModel");
 var getFiatValuHelper = require("../../helpers/get-fiat-value")
 var emailSendHelper = require("../../helpers/helpers");
 var UserNotificationModel = require("../../models/UserNotifcationModel");
-var EmailTemplateModel = require("../../models/EmailTemplateModel");
 var UsersModel = require("../../models/UsersModel");
 var AdminSettingModel = require("../../models/AdminSettingModel");
 var fs = require('fs');
-var appResponse = require("../../app");
 var logger = require("./logger");
 
 const RippleAPI = require('ripple-lib').RippleAPI;
 
 const api = new RippleAPI({
-    server: 'wss://s.altnet.rippletest.net:51233' // Public rippled server
+    server: process.env.RIPPLE_NETWORK // Public rippled server
 });
 api.connection._config.connectionTimeout = 3e4;
 api.connect().then(() => {
-    console.log('connected');
+    // console.log('connected');
     return api.getServerInfo().then(result => {
-        console.log(JSON.stringify(result, null, 2));
+        // console.log(JSON.stringify(result, null, 2));
     })
 }).then(() => {
     api.connection.on('transaction', async ev => {
@@ -34,7 +31,7 @@ api.connect().then(() => {
         console.log("ev", ev.engine_result);
         console.log("transaction", ev.transaction)
         if (ev.engine_result == "tesSUCCESS") {
-            if (ev.transaction.Account != 'rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P') {
+            if (ev.transaction.Account != process.env.ACCOUNT_ADDRESS) {
                 var coinData = await CoinModel
                     .query()
                     .first()
@@ -168,7 +165,7 @@ api.connect().then(() => {
     });
     api.connection.request({
         command: 'subscribe',
-        accounts: ['rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P']
+        accounts: [process.env.ACCOUNT_ADDRESS]
     });
 }).catch(console.error);
 
@@ -564,7 +561,7 @@ class InfluxController extends AppController {
             var address = req.body.address;
             console.log("address", address)
             if (address == "") {
-                address = "rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P";
+                address = process.env.ACCOUNT_ADDRESS;
             }
             api.getAccountInfo(address).then(async info => {
                 console.log(info);
@@ -698,7 +695,7 @@ class InfluxController extends AppController {
                 .select()
                 .where("deleted_at", null)
                 .andWhere("coin_id", coinData.id);
-            var data = await api.getTransactions("rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P", {
+            var data = await api.getTransactions(process.env.ACCOUNT_ADDRESS, {
                 limit: 50
             });
 
@@ -711,9 +708,9 @@ class InfluxController extends AppController {
                 var valueData = data[i].outcome.balanceChanges;
                 var valueOfData = data[i].outcome.deliveredAmount;
                 var transaction_type;
-                if (value.source.address == "rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P") {
+                if (value.source.address == process.env.ACCOUNT_ADDRESS) {
                     transaction_type = 'send';
-                } else if (value.destination.address == "rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P") {
+                } else if (value.destination.address == process.env.ACCOUNT_ADDRESS) {
                     transaction_type = "receive"
                 }
 
@@ -732,7 +729,7 @@ class InfluxController extends AppController {
                     usd: (valueOfData != undefined) ? (coinFiatValue != undefined && coinFiatValue.quote != undefined) ? ((valueOfData.value) * coinFiatValue.quote["USD"].price) : (0.0) : (0.0),
                     value: (valueOfData != undefined) ? Number(parseFloat(valueOfData.value * coinData.coin_precision).toFixed(8)) : (0.0),
                     valueString: (valueOfData != undefined) ? (valueOfData.value * coinData.coin_precision).toString() : ('0.0'),
-                    wallet: "rK5FivAcBmJei41jyhwzwnb5bDwhz5gU1P"
+                    wallet: process.env.ACCOUNT_ADDRESS
                 }
                 transfers.push(pushObject)
             }
