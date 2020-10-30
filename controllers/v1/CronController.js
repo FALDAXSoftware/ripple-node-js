@@ -188,7 +188,7 @@ class InfluxController extends AppController {
             var coin_id = await CoinModel
                 .query()
                 .first()
-                .where({ 'coin_code': 'txrp', 'is_active': 'true' });
+                .where({ 'coin_code': process.env.COIN, 'is_active': 'true' });
             if (coin_id != undefined) {
                 var userwallet = await WalletModel
                     .query()
