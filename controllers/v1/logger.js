@@ -1,5 +1,5 @@
 var bunyan = require('bunyan')
-const name = 'faldax-backend'
+const name = 'faldax-ripple-node-js'
 
 const configs = {
     src: true,

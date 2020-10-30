@@ -1,0 +1,29 @@
+{{- if .Values.controller.autoscaling.enabled }}
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  labels:
+    app: {{ include "currency.fullname" . }}
+    release: {{ .Release.Name }}
+  name: {{ include "currency.fullname" . }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1beta2
+    kind: Deployment
+    name: {{ include "currency.fullname" . }}
+  minReplicas: {{ .Values.controller.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.controller.autoscaling.maxReplicas }}
+  metrics:
+{{- with .Values.controller.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        targetAverageUtilization: {{ . }}
+{{- end }}
+{{- with .Values.controller.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        targetAverageUtilization: {{ . }}
+{{- end }}
+{{- end }}
